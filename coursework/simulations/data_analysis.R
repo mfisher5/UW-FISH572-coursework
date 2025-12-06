@@ -11,7 +11,7 @@ library(sdmTMB) # install.packages("sdmTMB")
 library(here) # install.packages("here")
 
 # Load simulated data ----------------------------------------------------------
-sim_dat <- readRDS(here::here("coursework/simulations/sim_data/sim_dat_10.RDS"))
+sim_dat <- readRDS(here::here("coursework/simulations/sim_data/sim_dat_20.RDS"))
 
 # sample 100 locations from each year using simple random sampling
 set.seed(99)
@@ -70,7 +70,7 @@ grid <- readRDS(here::here("coursework/simulations/sim_data/grid.RDS"))
 grid_yrs <- sdmTMB::replicate_df(grid, "year", unique(sim_dat$year))
 
 # predict
-predictions <- sdmTMB::predict(fit, newdata = grid_yrs, return_tmb_object = TRUE)
+predictions <- stats::predict(fit, newdata = grid_yrs, return_tmb_object = TRUE)
 
 # visualize predictions, then how fixed and random effects contribute 
 plot_map <- function(dat, column) {
