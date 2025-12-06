@@ -183,4 +183,5 @@ index_db <- theSample |>
   group_by(year) |> 
   summarize(index = mean(observation) * 10000, 
             variance = )
+#TODO: calculate variance and plot index with 95% CI compared to model-based index 
 ```
