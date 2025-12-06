@@ -35,6 +35,7 @@ mesh <- sdmTMB::make_mesh(sim_dat_obs,
                           xy_cols = c("X", "Y"), 
                           type = "cutoff_search", 
                           n_knots = 50)
+plot(mesh)
 
 fit <- sdmTMB::sdmTMB(
   formula = observed_scaled ~ 0 + as.factor(year), 
@@ -50,17 +51,57 @@ fit
 
 sanity(fit) # model checking
 
-# Inspect model and fit, predict, get abundance index --------------------------
-# following vignette :#https://pbs-assess.github.io/sdmTMB/articles/index-standardization.html
+# Inspect model ----------------------------------------------------------------
+# randomized quantile residuals
+sim_dat_obs$resids <- residuals(fit) 
+hist(sim_dat_obs$resids)
 
+# qq plot
+qqnorm(sim_dat_obs$resids)
+abline(a = 0, b = 1)
+
+# spatial residuals
+ggplot(sim_dat_obs, aes(X, Y, col = resids)) + scale_colour_gradient2() +
+  geom_point() + facet_wrap(~year) + coord_fixed()
+
+# predict model to grid of full survey domain ----------------------------------
 # replicate grid for each year to make prediction grid
 grid <- readRDS(here::here("coursework/simulations/sim_data/grid.RDS"))
 grid_yrs <- sdmTMB::replicate_df(grid, "year", unique(sim_dat$year))
 
 # predict
-predictions <- stats::predict(fit, newdata = grid_yrs, return_tmb_object = TRUE)
+predictions <- sdmTMB::predict(fit, newdata = grid_yrs, return_tmb_object = TRUE)
 
-# compute index
+# visualize predictions, then how fixed and random effects contribute 
+plot_map <- function(dat, column) {
+  ggplot(dat, aes(X, Y, fill = {{ column }})) +
+    geom_raster() +
+    facet_wrap(~year) +
+    coord_fixed()
+}
+
+# full prediction
+plot_map(predictions$data, exp(est)) +
+  scale_fill_viridis_c(trans = "sqrt") +
+  ggtitle("Prediction (fixed effects + all random effects)")
+
+# fixed effects only (year)
+plot_map(predictions$data, exp(est_non_rf)) +
+  ggtitle("Prediction (fixed effects only)") +
+  scale_fill_viridis_c(trans = "sqrt")
+
+# spatial random effects
+plot_map(predictions$data, omega_s) +
+  ggtitle("Spatial random effects only") +
+  scale_fill_gradient2()
+
+# spatiotemporal random effects
+plot_map(predictions$data, epsilon_st) +
+  ggtitle("Spatiotemporal random effects only") +
+  scale_fill_gradient2()
+
+# compute abundance index ------------------------------------------------------
+# we will assume that the area of each grid cell is 1
 index <- sdmTMB::get_index(predictions, area = 1, bias_correct = TRUE)
 
 # plot index
@@ -69,4 +110,3 @@ ggplot2::ggplot(index, aes(year, est)) +
   ggplot2::geom_ribbon(aes(ymin = lwr, ymax = upr), alpha = 0.4) +
   ggplot2::xlab('Year') + 
   ggplot2::ylab('Biomass estimate (kg)')
-
