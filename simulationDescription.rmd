@@ -56,7 +56,7 @@ ggplot(dplyr::filter(dat, year == 1), aes(X, Y)) +
 One potential use of simulated data is to examine alternative sampling designs. In this example, we sample from the 100 X 100 grid in year 1 using simple random sampling (SRS).
 
 ```{r SRS}
-source("coursework/simulations/functions_simulation.R")
+source("coursework/simulations/functions_sampling.R")
 set.seed(245)
 N <- 100 * 100
 n <- 1500
