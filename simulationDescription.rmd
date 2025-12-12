@@ -59,7 +59,7 @@ One potential use of simulated data is to examine alternative sampling designs. 
 source("coursework/simulations/functions_sampling.R")
 set.seed(245)
 N <- 100 * 100
-n <- 1500
+n <- 100
 year <- 1
 dat.yr <- dplyr::filter(dat, year == 1)
 sampleRowNum <- sample(1:nrow(dat.yr),n,replace=F)
@@ -181,15 +181,14 @@ ggplot2::ggplot(index, aes(year, est)) +
 
 Assuming again that the area of each grid cell is 1, under simple random sampling the design-based estimate is the product of the mean of observations and the total area (1 \* the number of grid cells in the domain). We then calculate the variance, standard error and 95% confidence interval.
 
-```{r index}
+```{r index_db}
 index_db <- theSample |> 
-  group_by(year) |> 
-  summarize(index = mean(observation) * N, 
-            variance = N^2 * (1-(n/N)) * (variance(observation)/n)
-            ) |>
-  mutate(se = sqrt(variance/n),
-         lwr = index - qt(0.975, df = n - 1) * se,
-         upr = index + qt(0.975, df = n - 1) * se)
+  dplyr::group_by(year) |> 
+  dplyr::summarize(index = mean(observation) * N, 
+                   variance = N^2 * (1-(n/N)) * (variance(observation)/n)) |>
+  dplyr::mutate(se = sqrt(variance/n),
+                lwr = index - qt(0.975, df = n - 1) * se,
+                upr = index + qt(0.975, df = n - 1) * se)
 
 # plot index with 95% CI
 ggplot2::ggplot(index_db, aes(year, index)) + 
