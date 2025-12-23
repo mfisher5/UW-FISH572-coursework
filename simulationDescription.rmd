@@ -82,7 +82,7 @@ sampleDat <- dat.yr[sampleRowNum,]
 # create sample (as if you were a boat sampling once in each sampled grid cell)
 obsCV <- 0.2  # if using "observed" set this to zero (observation error already applied)
 catchabilityPars <- list(mean=1,var=0.1) #related to gear selectivity (and availability to net)
-sample <- sampleGrid.fn(sampleDat, obsCV, catchabilityPars,varName="eta")
+sample <- sampleGrid.fn(sampleDat, obsCV, catchabilityPars,varName="eta_scaled")
 
 #plot sample
 ggplot(sample, aes(X, Y)) +
