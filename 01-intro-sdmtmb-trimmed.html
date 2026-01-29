@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="" xml:lang="">
+  <head>
+    <title>UW FISH 572 Survey Science</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="Lewis Barnett &amp; Eric Ward" />
+    <meta name="date" content="2026-02-02" />
+    <script src="libs/header-attrs-2.21/header-attrs.js"></script>
+    <link rel="stylesheet" href="xaringan-themer.css" type="text/css" />
+    <link rel="stylesheet" href="theme.css" type="text/css" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+.title[
+# UW FISH 572 Survey Science
+]
+.subtitle[
+## Practical introduction to model-based index standardization
+]
+.author[
+### Lewis Barnett &amp; Eric Ward
+]
+.institute[
+### Alaska Fisheries Science Center
+]
+.date[
+### February 2, 2026
+]
+
+---
+
+
+&lt;!-- Build with: xaringan::inf_mr() --&gt;
+
+
+
+
+
+# Outline
+
+* Brief intro to model-based index standardization with sdmTMB and mgcv
+
+* Self-guided practical coding exercises
+
+* If time, begin applying methods to your own data
+
+---
+
+# sdmTMB highlights
+
+An R package for spatially explicit predictive-process GLMMs (Generalized Linear Mixed Effect Models)
+
+* Can model spatial and spatiotemporal variation with Gaussian random fields
+
+* Provides spatial covariance statistics that can be useful (e.g. spatial scale of correlation)
+
+&lt;img src="images/logo-sdmTMB.png" width="180px"/&gt;
+
+---
+
+# mgcv similarities and differences
+
+An R package for GAMMs (General additive mixed effect models)
+  
+* Can model spatial variation using smoothers on spatial coordinates
+
+* Does not provide spatial covariance statistics
+
+&lt;img src="images/logo-GAM.png" width="250px"/&gt;
+
+---
+
+# Why use a spatial model?
+
+* Data often has spatial attributes
+
+* Ideal world:
+  * Plug spatial covariates into a GLM / GLMM
+  * Residuals are uncorrelated  
+  
+&lt;img src="01-intro-sdmtmb-trimmed_files/figure-html/sim-rf-intro-1.png" width="700px" style="display: block; margin: auto;" /&gt;
+
+---
+
+# Reality
+  
+* Residual spatial autocorrelation
+
+&lt;img src="01-intro-sdmtmb-trimmed_files/figure-html/sim-rf-intro-cor-1.png" width="700px" style="display: block; margin: auto;" /&gt;
+
+---
+
+# Modeling spatial autocorrelation
+
+* Need 'wiggly'/smooth surface for approximating all spatial variables missing from model ('latent' variables)
+
+* Several equivalent approaches exist
+  * Smooths in `mgcv()`  
+  * Random fields and the Stochastic Partial Differential Equation (SPDE)
+
+* SPDE differs in that it explicitly estimates parameters for spatial covariance function
+
+.xsmall[
+Miller, D.L., Glennie, R. &amp; Seaton, A.E. Understanding the Stochastic Partial Differential Equation Approach to Smoothing. JABES 25, 1–16 (2020)
+]
+
+---
+
+# Predictive process models 
+
+* Estimate spatial field as random effects (random field)
+
+* Gaussian process predictive process models:
+  * Estimate values at a subset of locations ('knots')
+  * Use covariance function to interpolate from knots to locations of observations
+
+---
+
+# Predictive process models 
+
+* More knots (vertical dashed lines) = more wiggliness &amp; parameters to estimate
+
+&lt;img src="01-intro-sdmtmb-trimmed_files/figure-html/show-gp-1.png" width="700px" style="display: block; margin: auto;" /&gt;
+
+---
+
+# What is a random field in practical terms?
+
+* A way of estimating a wiggly surface to account for spatial and/or spatiotemporal correlation in data
+
+--
+
+* Alternatively, a way of estimating a wiggly surface to account for "latent" or unobserved variables
+
+--
+
+* As a bonus, it provides useful covariance parameter estimates: spatial variance and the distance at data points are effectively uncorrelated ("range")
+
+---
+
+# sdmTMB workflow
+
+1. Prepare data .xsmall[(convert to UTMs, scale covariates, ...)]
+
+2. Construct a mesh
+
+3. Fit the model
+
+4. Inspect the model .xsmall[(and possibly refit the model)]
+
+5. Predict from the model
+
+6. Calculate index
+
+---
+
+# sdmTMB workflow
+
+1. Prepare data: .blue[`add_utm_columns()`]
+
+2. Construct a mesh: .blue[`make_mesh()`]
+
+3. Fit the model: .blue[`sdmTMB()`]
+
+4. Inspect the model: .blue[`print()`], .blue[`sanity()`], .blue[`tidy()`], .blue[`residuals()`]
+
+5. Predict from the model: .blue[`predict()`]
+
+6. Calculate index: .blue[`get_index()`]
+
+&lt;!-- &lt;img src="images/sdmTMB_workflow.png" height = "500px" width="900px" /&gt; --&gt;
+
+---
+
+class: center, middle, inverse
+
+# Preparing data: getting into constant distance coordinates
+
+---
+
+# Projecting to UTMs to preserve distance
+
+* Helper function: `sdmTMB::add_utm_columns()`
+
+* Guesses UTM zone and uses the sf package:  
+`sf::st_as_sf()`, `sf::st_transform()`, and `sf::st_coordinates()`
+
+* Note default `units = "km"` because:
+  * Range parameter estimated in units of X and Y
+  * Values not too big or small for estimation
+
+---
+
+class: center, middle, inverse
+
+# Constructing a mesh
+
+---
+
+# Constructing a mesh
+
+`make_mesh()` has 2 shortcuts to mesh construction
+
+1. K-means algorithm: used to cluster points (e.g., `n_knots = 100`); approach taken in VAST; sensitive to random `seed` argument!
+
+2. Cutoff: minimum allowed distance between vertices (e.g., `cutoff = 10`)
+
+---
+
+# Constructing a mesh
+
+.small[
+Size of mesh has the single largest impact on fitting speed
+`cutoff` (minimum triangle side length) is in units of x and y 
+
+
+```r
+d &lt;- data.frame(x = runif(500), y = runif(500))
+mesh &lt;- make_mesh(d, xy_cols = c("x", "y"), cutoff = 0.1)
+mesh$mesh$n
+#&gt; [1] 91
+plot(mesh)
+```
+
+&lt;img src="01-intro-sdmtmb-trimmed_files/figure-html/make-mesh-1.png" width="280px" style="display: block; margin: auto;" /&gt;
+]
+
+---
+
+class: center, middle, inverse
+
+# Fitting the model: sdmTMB()
+
+---
+
+# sdmTMB()
+
+Common arguments:
+
+```r
+fit &lt;- sdmTMB(
+  formula,
+  data,
+  mesh,
+  time = NULL,
+  family = gaussian(link = "identity"),
+  spatial = c("on", "off"),
+  spatiotemporal = c("iid", "ar1", "rw", "off"),
+  silent = TRUE,
+  ...
+)
+```
+
+See `?sdmTMB`
+
+---
+
+class: center, middle, inverse
+
+# Fitting the model: non-spatial model components
+
+---
+
+# Formula interface
+
+sdmTMB uses a similar formula interface to widely used R packages
+
+A formula is used to specify fixed effects and (optionally) random intercepts
+
+.small[
+
+```r
+# linear effect of x1:
+formula = y ~ x1
+
+# add smoother effect of x2:
+formula = y ~ x1 + s(x2)
+
+# add random intercept by group g:
+formula = y ~ x1 + s(x2) + (1 | g)
+```
+]
+
+---
+
+# Other common R formula options
+
+Polynomials and omitting the intercept:
+
+
+```r
+# polynomial functions using `poly`
+y ~ poly(depth, degree = 2)
+
+# omit intercept
+y ~ -1 + as.factor(year)
+y ~ 0 + as.factor(year)
+```
+
+---
+
+# Families and links
+
+Many of the same families used in `glm()`, `glmmTMB()`, `mgcv::gam()` can be used here
+
+Includes:
+  `gaussian()`, `Gamma()`, 
+  `binomial()`, `poisson()`, `Beta()`, 
+  `student()`, `tweedie()`, 
+  `nbinom1()`, `nbinom2()`,
+  `truncated_nbinom1()`, `truncated_nbinom2()`,
+  `delta_gamma()`, `delta_lognormal()`, `delta_beta()`, and more...
+  
+All have `link` arguments
+  
+See `?sdmTMB::Families`
+
+---
+
+class: center, middle, inverse
+
+# Fitting the model: spatial model components
+
+---
+
+# Spatial vs. spatiotemporal fields
+
+* A spatial field can be thought of as a spatial intercept
+
+  * a wiggly spatial process that is constant in time
+  
+--
+
+* Spatiotemporal variation represents separate fields estimated for each time
+  slice (possibly correlated)
+  
+  * wiggly spatial processes that change through time
+
+---
+
+# Spatial fields can be turned on/off
+
+* By default `sdmTMB()` estimates a spatial field  
+
+
+```r
+fit &lt;- sdmTMB(
+  y ~ x,
+  family = gaussian(),
+  data = dat,
+  mesh = mesh,
+* spatial = "on",
+  ...
+)
+```
+
+---
+
+# Why *not* estimate a spatial field?
+
+* If shared process across time slices isn't of interest
+
+* If magnitude of spatiotemporal variability &gt;&gt; spatial variation
+
+* If confounded with other parameters
+
+---
+
+# Spatiotemporal fields
+
+* Represents missing variables that vary through time
+
+* Why include spatiotemporal fields?
+  * If the data are collected in both space and time *and* 
+    there are 'latent' spatial processes that vary through time
+    
+      * e.g., effect of water temperature on abundance, if temperature wasn't in the model
+
+---
+
+# Types of spatiotemporal fields
+
+* None (`spatiotemporal = "off"`)
+
+* Independent (`spatiotemporal = "iid"`)
+
+* Random walk (`spatiotemporal = "rw"`)
+
+* Autoregressive (`spatiotemporal = "ar1"`)
+
+---
+
+# Types of spatiotemporal fields
+
+* The type of field to use depends on this question:
+
+  * Do you expect hotspots to be independent with each time slice (IID) or adapt slowly over time (AR1/RW)?
+  
+* For stock assessments, indices often use IID fields so that all temporal correlation is handled inside the assessment model itself
+
+---
+
+# Fit a model for index standardization of cod data
+
+Omit intercept and include an annual mean in formula to derive annual index from coefficients
+
+
+```r
+mesh &lt;- make_mesh(pcod, xy_cols=c("X", "Y"), cutoff=10)
+fit &lt;- sdmTMB(
+* density ~ 0 + as.factor(year),
+  data = pcod,
+  mesh = mesh,
+  family = tweedie(link = "log"),
+  spatial = "on",
+  time = "year",
+  spatiotemporal = "iid"
+)
+```
+
+---
+
+# Fit a model for index standardization of cod data
+
+Include a covariate (depth) and specify how this should be modeled
+
+
+```r
+fit &lt;- sdmTMB(
+* density ~ s(depth) + 0 + as.factor(year),
+  data = pcod,
+  mesh = mesh,
+  family = tweedie(link = "log"),
+  spatial = "on",
+  time = "year",
+  spatiotemporal = "iid"
+)
+```
+
+---
+class: center, middle, inverse
+
+# Inspect the model
+
+---
+
+# Checking convergence  
+
+* Learning curve of TMB can be steep  
+* Models can be very complex (hard to diagnose issues)
+* `sanity()` function tries to help
+
+.xsmall[
+
+```r
+sanity(fit)
+#&gt; ✔ Non-linear minimizer suggests successful convergence
+#&gt; ✔ Hessian matrix is positive definite
+#&gt; ✔ No extreme or very small eigenvalues detected
+#&gt; ✔ No gradients with respect to fixed effects are &gt;= 0.001
+#&gt; ✔ No fixed-effect standard errors are NA
+#&gt; ✔ No standard errors look unreasonably large
+#&gt; ✔ No sigma parameters are &lt; 0.01
+#&gt; ✔ No sigma parameters are &gt; 100
+#&gt; ✔ Range parameter doesn't look unreasonably large
+```
+]
+
+---
+
+# Inspecting the model fit
+
+
+```r
+fit
+```
+
+.xsmall[
+
+```r
+#&gt;                     coef.est coef.se
+# as.factor(year)2003     1.80    0.28
+# as.factor(year)2004     2.40    0.27
+# as.factor(year)2005     2.12    0.27
+# as.factor(year)2007     0.92    0.29
+# as.factor(year)2009     1.43    0.28
+# as.factor(year)2011     1.88    0.28
+# as.factor(year)2013     2.17    0.27
+# as.factor(year)2015     2.11    0.27
+# as.factor(year)2017     1.39    0.28
+# sdepth                  3.95   26.46
+# 
+# Dispersion parameter: 10.73
+# Tweedie p: 1.49
+# Matern range: 12.23
+# Spatial SD: 1.85
+# Spatiotemporal SD: 1.84
+# ML criterion at convergence: 6242.801
+```
+]
+
+---
+
+# Model residuals
+
+.xsmall[
+Warning: these residuals are fast but might look off even if the model is fine. Also see MCMC residuals. See the ['Residual checking' vignette](https://pbs-assess.github.io/sdmTMB/articles/residual-checking.html).
+]
+
+
+```r
+set.seed(1)
+rq_res &lt;- residuals(fit) # randomized quantile residuals
+qqnorm(rq_res);qqline(rq_res)
+```
+
+&lt;img src="01-intro-sdmtmb-trimmed_files/figure-html/resid1-1.png" width="500px" style="display: block; margin: auto;" /&gt;
+
+---
+
+# Model residuals in space
+
+.small[
+
+```r
+pcod$resids &lt;- residuals(fit)
+filter(pcod, year %in% c(2015, 2017)) %&gt;% 
+* ggplot(aes(X, Y, colour = resids)) +
+  geom_point() +
+  facet_wrap(~year) +
+  scale_colour_gradient2() +
+  coord_fixed()
+```
+
+&lt;img src="01-intro-sdmtmb-trimmed_files/figure-html/resid2-1.png" width="500px" style="display: block; margin: auto;" /&gt;
+]
+
+---
+
+class: center, middle, inverse
+
+# Predict from the model
+
+---
+
+# Predict over the survey domain
+
+.small[
+* `qcs_grid`: a 2x2 km grid extending over the full survey domain
+]
+.small[
+
+```r
+ggplot(qcs_grid, aes(X, Y, fill = depth)) + 
+  geom_raster() +
+  coord_fixed()
+```
+
+&lt;img src="01-intro-sdmtmb-trimmed_files/figure-html/unnamed-chunk-2-1.png" width="500px" style="display: block; margin: auto;" /&gt;
+]
+
+---
+
+# Predict over the survey domain
+
+.xsmall[
+
+```r
+# replicate grid over all years:
+survey_grid &lt;- replicate_df(qcs_grid, "year", unique(pcod$year))
+pred &lt;- predict(
+  fit, newdata = survey_grid, return_tmb_object = TRUE
+)
+select(pred$data, year, X, Y, est, est_non_rf, est_rf, omega_s, epsilon_st) |&gt; 
+  head()
+#&gt;   year   X    Y       est est_non_rf     est_rf   omega_s  epsilon_st
+#&gt; 1 2003 456 5636 -3.730875  -3.803677 0.07280115 0.1008410 -0.02803982
+#&gt; 2 2003 458 5636  1.624400   1.529580 0.09482001 0.1232472 -0.02842721
+#&gt; 3 2003 460 5636  2.362616   2.245777 0.11683886 0.1456534 -0.02881459
+#&gt; 4 2003 462 5636  3.236758   3.097901 0.13885771 0.1680597 -0.02920197
+#&gt; 5 2003 464 5636  3.297821   3.110504 0.18731776 0.2060681 -0.01875031
+#&gt; 6 2003 466 5636  3.317910   2.966754 0.35115614 0.3121577  0.03899844
+```
+]
+
+---
+
+# Predict over the survey domain
+
+* `est`: Overall estimate in link space (log here)
+* `est_non_rf`: Estimate of non-random-field components
+* `est_rf`: Estimate of random-field components
+* `omega_s`: Spatial random field
+* `epsilon_st`: Spatiotemporal random field
+
+---
+
+# Plotting overall predictions
+
+&lt;img src="01-intro-sdmtmb-trimmed_files/figure-html/pcod-st-plot-est-1.png" width="700px" style="display: block; margin: auto;" /&gt;
+
+---
+
+# Plotting depth effect with visreg
+
+.small[
+
+```r
+visreg::visreg(fit, xvar = "depth", scale = "response")
+```
+
+&lt;img src="01-intro-sdmtmb-trimmed_files/figure-html/pcod-sp-depth-visreg-resp-1.png" width="700px" style="display: block; margin: auto;" /&gt;
+]
+
+---
+
+class: center, middle, inverse
+
+# Calculate an area-weighted population index
+
+---
+
+# Sum densities multiplied by cell areas
+
+(*and calculate standard errors)
+
+
+```r
+index &lt;- get_index(pred, area = 4, bias_correct = TRUE)
+head(index)
+#&gt;   year       est       lwr       upr  log_est        se  type
+#&gt; 1 2003  957592.8  691686.7 1325721.5 13.77218 0.1659671 index
+#&gt; 2 2004 1585884.6 1223175.1 2056148.8 14.27665 0.1324985 index
+#&gt; 3 2005 1590357.5 1135313.1 2227788.1 14.27947 0.1719676 index
+#&gt; 4 2007  362802.1  269084.4  489160.2 12.80161 0.1524683 index
+#&gt; 5 2009  688792.4  511393.0  927730.7 13.44270 0.1519424 index
+#&gt; 6 2011 1298822.9  986437.6 1710134.3 14.07697 0.1403666 index
+```
+
+---
+
+# Plot the standardized index
+
+.small[
+
+```r
+ggplot(index, aes(year, est)) + geom_line() +
+  geom_ribbon(aes(ymin = lwr, ymax = upr), alpha = 0.4) +
+  xlab('Year') + ylab('Biomass estimate (kg)')
+```
+
+&lt;img src="01-intro-sdmtmb-trimmed_files/figure-html/pcod-st-index-plot-1.png" width="600px" style="display: block; margin: auto;" /&gt;
+]
+
+---
+
+class: center, middle, inverse
+
+# Part II: GAM indices with mgcv
+
+---
+
+# Very brief intro to GAMs
+
+* A quick and easy way to model nonlinear responses
+
+* Aim: smooth enough to fit data, but not overfit!
+
+* For more details, see tutorials, e.g.,
+**Generalized Additive Models in R: A Free Interactive Course**: &lt;https://noamross.github.io/gams-in-r-course&gt;.
+&lt;img src="images/logo-noam-course.PNG" align="center" width="400px"/&gt;
+
+---
+
+# Goldilocks smoothing
+
+* Smoothing parameter (lambda)
+
+&lt;img src="images/diffsmooth-1-noam.png" width="700px"/&gt;
+
+---
+
+# Goldilocks smoothing
+
+* Number of basis functions (k)
+
+&lt;img src="images/diffbasis-1-noam.png" width="700px"/&gt;
+
+---
+
+# Smoothers in mgcv
+
+.small[
+
+```r
+# smoother effect of x:
+formula = y ~ s(x)
+
+# basis dimension of 5:
+formula = y ~ s(x, k = 5)
+
+# smoother effect of x1 varying by x2:
+formula = y ~ s(x1, by = x2)
+```
+]
+
+Many types of basis functions available (e.g. cyclic splines)
+
+---
+
+# Fit a GAM for index standardization of BC Pacific cod data
+
+Include a covariate (depth) 
+
+Analogous to nonspatial model (spatial = "off", spatiotemporal = "off")
+
+.small[
+
+```r
+fit_gam &lt;- gam(
+  formula = density ~ s(depth) + as.factor(year),
+  family = tw(link = "log"),
+  data = pcod
+)
+```
+]
+
+---
+
+# Predict to survey area
+
+.xsmall[
+
+```r
+pred_gam &lt;- predict(fit_gam, type = "response", newdata = survey_grid)
+pred_gam_df &lt;- cbind(survey_grid, pred_gam)
+
+ggplot(pred_gam_df, aes(X, Y, fill = pred_gam)) + geom_raster() +
+  scale_fill_viridis_c() + facet_wrap(~year) + coord_fixed() +
+  labs(fill = "Log Biomass density\n(kg/km^2)")
+```
+
+&lt;img src="01-intro-sdmtmb-trimmed_files/figure-html/pcod-gam-pred-1.png" width="700px" style="display: block; margin: auto;" /&gt;
+]
+
+---
+
+# Calculate biomass index via simulation
+
+.xsmall[
+
+```r
+sims &lt;- gratia::fitted_samples(fit_gam, n=10, data=survey_grid, 
+                               scale="response", seed=9)
+sims$year &lt;- survey_grid$year[sims$.row]
+sims$biomass &lt;- sims$.fitted * 4 # expand from density to biomass, given area
+
+level &lt;- 0.95 # specify probability for confidence interval
+
+# Get sum of simulated biomass (density*area) across grid cells, with CI
+lwr_fn &lt;- function(x) {as.numeric(quantile(x, probs = (1 - level) / 2))}
+upr_fn &lt;- function(x) {as.numeric(quantile(x, probs = 1 - (1 - level) / 2))}
+
+sims_sum &lt;-  sims %&gt;% 
+  group_by(year,.draw) %&gt;% 
+  summarise_at("biomass", list(biomass = sum)) %&gt;%
+  group_by(year) %&gt;%
+  summarise_at("biomass", list(est = median, # could use mean
+                           lwr = lwr_fn,
+                           upr = upr_fn))
+```
+]
+
+Note that this approach uses a Gaussian approximation to the posterior
+
+---
+
+# Plot biomass index
+
+.xsmall[
+
+```r
+ggplot(sims_sum, aes(year, est)) + geom_line() +
+  geom_ribbon(aes(ymin = lwr, ymax = upr), alpha = 0.4) +
+  xlab('Year') + ylab('Biomass estimate (kg)')
+```
+
+&lt;img src="01-intro-sdmtmb-trimmed_files/figure-html/pcod-gam-index-plot-1.png" width="700px" style="display: block; margin: auto;" /&gt;
+]
+
+---
+
+# Spatial GAMs with 2-D smoothers
+
+&lt;img src="images/formula-2d-noam.png" width="200px"/&gt;
+
+&lt;img src="images/interactions-1-1-noam.png" width="550px"/&gt;
+
+---
+
+# Brief GAM tip summary
+
+* Experiment with amount of smoothing to avoid under/over fitting
+
+* Be wary of uncertainty estimated without fully Bayesian posterior sampling
+
+* See examples of more complex (spatial and spatiotemporal) model structures in exercise
+
+---
+
+# Zooming out for perspective on alternative indices
+
+There is *one* design-based index.
+
+--
+
+There are *many* possible model-based indexes. Thankfully, results are often (but not always!) qualitatively similar across sensible configurations.
+
+
+.tiny[
+Commander, C.J.C, L.A.K. Barnett, E.J. Ward, S.C. Anderson, T.E. Essington. 2022. The shadow model: how and why small choices in spatially explicit species distribution models affect predictions. PeerJ. 10: e12783. &lt;https://doi.org/10.7717/peerj.12783&gt;
+]
+
+---
+
+# Model-based estimates of composition
+
+See this vignette for estimating abundance or proportions at age
+
+&lt;https://sdmtmb.github.io/sdmTMB/articles/age-composition.html#sdmtmb-vs--tinyvast-for-age-composition-models&gt;
+    </textarea>
+<style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"highlightLines": true,
+"countIncrementalSlides": false
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function(d) {
+  var s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})(document);
+
+(function(d) {
+  var el = d.getElementsByClassName("remark-slides-area");
+  if (!el) return;
+  var slide, slides = slideshow.getSlides(), els = el[0].children;
+  for (var i = 1; i < slides.length; i++) {
+    slide = slides[i];
+    if (slide.properties.continued === "true" || slide.properties.count === "false") {
+      els[i - 1].className += ' has-continuation';
+    }
+  }
+  var s = d.createElement("style");
+  s.type = "text/css"; s.innerHTML = "@media print { .has-continuation { display: none; } }";
+  d.head.appendChild(s);
+})(document);
+// delete the temporary CSS (for displaying all slides initially) when the user
+// starts to view slides
+(function() {
+  var deleted = false;
+  slideshow.on('beforeShowSlide', function(slide) {
+    if (deleted) return;
+    var sheets = document.styleSheets, node;
+    for (var i = 0; i < sheets.length; i++) {
+      node = sheets[i].ownerNode;
+      if (node.dataset["target"] !== "print-only") continue;
+      node.parentNode.removeChild(node);
+    }
+    deleted = true;
+  });
+})();
+// add `data-at-shortcutkeys` attribute to <body> to resolve conflicts with JAWS
+// screen reader (see PR #262)
+(function(d) {
+  let res = {};
+  d.querySelectorAll('.remark-help-content table tr').forEach(tr => {
+    const t = tr.querySelector('td:nth-child(2)').innerText;
+    tr.querySelectorAll('td:first-child .key').forEach(key => {
+      const k = key.innerText;
+      if (/^[a-z]$/.test(k)) res[k] = t;  // must be a single letter (key)
+    });
+  });
+  d.body.setAttribute('data-at-shortcutkeys', JSON.stringify(res));
+})(document);
+(function() {
+  "use strict"
+  // Replace <script> tags in slides area to make them executable
+  var scripts = document.querySelectorAll(
+    '.remark-slides-area .remark-slide-container script'
+  );
+  if (!scripts.length) return;
+  for (var i = 0; i < scripts.length; i++) {
+    var s = document.createElement('script');
+    var code = document.createTextNode(scripts[i].textContent);
+    s.appendChild(code);
+    var scriptAttrs = scripts[i].attributes;
+    for (var j = 0; j < scriptAttrs.length; j++) {
+      s.setAttribute(scriptAttrs[j].name, scriptAttrs[j].value);
+    }
+    scripts[i].parentElement.replaceChild(s, scripts[i]);
+  }
+})();
+(function() {
+  var links = document.getElementsByTagName('a');
+  for (var i = 0; i < links.length; i++) {
+    if (/^(https?:)?\/\//.test(links[i].getAttribute('href'))) {
+      links[i].target = '_blank';
+    }
+  }
+})();
+// adds .remark-code-has-line-highlighted class to <pre> parent elements
+// of code chunks containing highlighted lines with class .remark-code-line-highlighted
+(function(d) {
+  const hlines = d.querySelectorAll('.remark-code-line-highlighted');
+  const preParents = [];
+  const findPreParent = function(line, p = 0) {
+    if (p > 1) return null; // traverse up no further than grandparent
+    const el = line.parentElement;
+    return el.tagName === "PRE" ? el : findPreParent(el, ++p);
+  };
+
+  for (let line of hlines) {
+    let pre = findPreParent(line);
+    if (pre && !preParents.includes(pre)) preParents.push(pre);
+  }
+  preParents.forEach(p => p.classList.add("remark-code-has-line-highlighted"));
+})(document);</script>
+
+<script>
+slideshow._releaseMath = function(el) {
+  var i, text, code, codes = el.getElementsByTagName('code');
+  for (i = 0; i < codes.length;) {
+    code = codes[i];
+    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+      text = code.textContent;
+      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
+          /^\$\$(.|\s)+\$\$$/.test(text) ||
+          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+        code.outerHTML = code.innerHTML;  // remove <code></code>
+        continue;
+      }
+    }
+    i++;
+  }
+};
+slideshow._releaseMath(document);
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>

@@ -1,0 +1,1477 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.5.57">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>Fitting a spatiotemporal model and deriving an abundance index</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="02-exercise_files/libs/clipboard/clipboard.min.js"></script>
+<script src="02-exercise_files/libs/quarto-html/quarto.js"></script>
+<script src="02-exercise_files/libs/quarto-html/popper.min.js"></script>
+<script src="02-exercise_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="02-exercise_files/libs/quarto-html/anchor.min.js"></script>
+<link href="02-exercise_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="02-exercise_files/libs/quarto-html/quarto-syntax-highlighting.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="02-exercise_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="02-exercise_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="02-exercise_files/libs/bootstrap/bootstrap.min.css" rel="stylesheet" id="quarto-bootstrap" data-mode="light">
+
+
+</head>
+
+<body class="fullcontent">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Fitting a spatiotemporal model and deriving an abundance index</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="goals" class="level1">
+<h1>Goals:</h1>
+<ul>
+<li>Practice fitting a basic spatiotemporal model.</li>
+<li>Understand how to inspect the model output.</li>
+<li>Practice predicting from the model on new data and making visualizations of those predictions.</li>
+<li>Gain familiarity with fitting, comparing and interpreting different random field structures.</li>
+<li>Calculate an area-weighted biomass index and compare how model structure can impact an index.</li>
+</ul>
+</section>
+<section id="the-data" class="level1">
+<h1>The data</h1>
+<p>We will work with data representing North Pacific Spiny Dogfish in the West Coast Vancouver Island synoptic trawl survey.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>dat <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(here<span class="sc">::</span><span class="fu">here</span>(<span class="st">"uw-survey-2026/data/wcvi-dogfish.rds"</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">head</span>(dat)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 6 × 5
+  longitude latitude  year depth density
+      &lt;dbl&gt;    &lt;dbl&gt; &lt;int&gt; &lt;dbl&gt;   &lt;dbl&gt;
+1     -126.     48.4  2004   140   4.56 
+2     -126.     48.4  2004   145   0.395
+3     -126.     48.3  2004   320   0.124
+4     -126.     48.4  2004   554   0    
+5     -126.     48.4  2004   279   0    
+6     -126.     48.7  2004   117   0.497</code></pre>
+</div>
+</div>
+<p>The dataset contains sampling locations (<code>longitude</code> and <code>latitude</code>) and <code>year</code>. It also contains sampling <code>depth</code> in meters and sample density <code>density</code> (CPUE) in units of tonnes/km<sup>2</sup>.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(dat, <span class="fu">aes</span>(longitude, latitude, <span class="at">size =</span> density)) <span class="sc">+</span> <span class="fu">geom_point</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-4-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="adding-utms" class="level1">
+<h1>Adding UTMs</h1>
+<p>We can add UTM columns using <code>add_utm_columns()</code>:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">add_utm_columns</span>(dat, <span class="at">ll_names =</span> <span class="fu">c</span>(<span class="st">"longitude"</span>, <span class="st">"latitude"</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning: Multiple UTM zones detected.
+Proceeding with the most common value.
+You may wish to choose a different projection.</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Proceeding with UTM zone 9N; CRS = 32609.</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Visit https://epsg.io/32609 to verify.</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 1,333 × 7
+   longitude latitude  year depth density     X     Y
+       &lt;dbl&gt;    &lt;dbl&gt; &lt;int&gt; &lt;dbl&gt;   &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;
+ 1     -126.     48.4  2004   140   4.56   744. 5362.
+ 2     -126.     48.4  2004   145   0.395  737. 5362.
+ 3     -126.     48.3  2004   320   0.124  729. 5356.
+ 4     -126.     48.4  2004   554   0      725. 5362.
+ 5     -126.     48.4  2004   279   0      712. 5368.
+ 6     -126.     48.7  2004   117   0.497  734. 5403.
+ 7     -126.     48.7  2004    70   0.558  731. 5394.
+ 8     -126.     48.6  2004    61   0.610  737. 5393.
+ 9     -126.     48.6  2004    77   0.767  731. 5383.
+10     -126.     48.5  2004    92   8.45   734. 5377.
+# ℹ 1,323 more rows</code></pre>
+</div>
+</div>
+<p>Note that this function guesses at an appropriate UTM projection for you and provides a URL to verify. To ensure future compatibility with prediction grids or other data, it is best to hard code the choice using the <code>utm_crs</code> argument. We will use <code>CRS = 3156</code> here to match our prediction grid:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>dat <span class="ot">&lt;-</span> <span class="fu">add_utm_columns</span>(dat, <span class="at">utm_crs =</span> <span class="dv">3156</span>, <span class="at">ll_names =</span> <span class="fu">c</span>(<span class="st">"longitude"</span>, <span class="st">"latitude"</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>And check to make sure that looks right:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(dat, <span class="fu">aes</span>(X, Y, <span class="at">size =</span> density)) <span class="sc">+</span> <span class="fu">geom_point</span>(<span class="at">shape =</span> <span class="dv">21</span>) <span class="sc">+</span> <span class="fu">coord_fixed</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-7-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>We can also plot the data by year:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(dat, <span class="fu">aes</span>(X, Y, <span class="at">size =</span> density, <span class="at">colour =</span> <span class="fu">log</span>(density <span class="sc">+</span> <span class="dv">1</span>))) <span class="sc">+</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>(<span class="at">alpha =</span> <span class="fl">0.3</span>) <span class="sc">+</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span>year) <span class="sc">+</span> <span class="fu">coord_fixed</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-8-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>We will create these new columns to use later:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>dat<span class="sc">$</span>log_depth <span class="ot">&lt;-</span> <span class="fu">log</span>(dat<span class="sc">$</span>depth)</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>dat<span class="sc">$</span>year_factor <span class="ot">&lt;-</span> <span class="fu">as.factor</span>(dat<span class="sc">$</span>year)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="constructing-a-mesh" class="level1">
+<h1>Constructing a mesh</h1>
+<p>We start by constructing an SPDE mesh with INLA. This creates some matrices that are used internally when fitting the model. We will use the shortcut function <code>make_mesh()</code> and use a cutoff (minimum triangle length of 10 km). Note: this is the only parameter that can be changed in <code>make_mesh()</code> but more control over mesh arguments can be done with INLA (<code>inla.mesh.2d()</code>).</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>mesh <span class="ot">&lt;-</span> <span class="fu">make_mesh</span>(dat, <span class="at">xy_cols =</span> <span class="fu">c</span>(<span class="st">"X"</span>, <span class="st">"Y"</span>), <span class="at">cutoff =</span> <span class="dv">10</span>)</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(mesh)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-10-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>mesh<span class="sc">$</span>mesh<span class="sc">$</span>n <span class="co"># number of vertices or knots</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] 139</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co"># ggplot alternative:</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>() <span class="sc">+</span> inlabru<span class="sc">::</span><span class="fu">gg</span>(mesh<span class="sc">$</span>mesh) <span class="sc">+</span> <span class="fu">coord_fixed</span>() <span class="sc">+</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>(<span class="fu">aes</span>(X, Y), <span class="at">data =</span> dat, <span class="at">alpha =</span> <span class="fl">0.2</span>, <span class="at">size =</span> <span class="fl">0.5</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Registered S3 methods overwritten by 'inlabru':
+  method       from   
+  $.fm_crs     fmesher
+  print.fm_crs fmesher</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Loading required namespace: INLA</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-10-2.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+<section id="exercise" class="level3">
+<h3 class="anchored" data-anchor-id="exercise">Exercise:</h3>
+<ol type="1">
+<li>Try adjusting the size of the cutoff distance to explore the effects of decreasing the mesh resolution. Make sure to reset the <code>cutoff</code> value to <code>10</code> in the end so the rest of the exercise behaves as intended, because model convergence issues can be caused by meshes that are either too fine or too coarse.</li>
+</ol>
+</section>
+</section>
+<section id="fitting-a-spatial-model" class="level1">
+<h1>Fitting a spatial model</h1>
+<p>The most basic model we could fit would be a model with a single spatial random field, and no covariates. Using <code>silent = FALSE</code> lets us see what is happening, but it’s awkward when running code in Rmd/Quarto chunks (with the default RStudio setting to ‘Show output inline for all R Markdown document’) so we will comment it out in most cases here. But it is a good idea to use it if models are running slowly or not converging to monitor progress.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb20"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>fit_spatial <span class="ot">&lt;-</span> <span class="fu">sdmTMB</span>(</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>  density <span class="sc">~</span> <span class="dv">1</span>, <span class="co"># intercept only</span></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">data =</span> dat,  </span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">family =</span> <span class="fu">tweedie</span>(<span class="at">link =</span> <span class="st">"log"</span>),</span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">mesh =</span> mesh,</span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">spatial =</span> <span class="st">"on"</span>,</span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>  <span class="co"># silent = FALSE</span></span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb21"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="fu">sanity</span>(fit_spatial)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ Non-linear minimizer suggests successful convergence</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ Hessian matrix is positive definite</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ No extreme or very small eigenvalues detected</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✖ `thetaf` gradient &gt; 0.001</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>ℹ See ?run_extra_optimization(), standardize covariates, and/or simplify the model</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ No fixed-effect standard errors are NA</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ No standard errors look unreasonably large</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ No sigma parameters are &lt; 0.01</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ No sigma parameters are &gt; 100</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ Range parameter doesn't look unreasonably large</code></pre>
+</div>
+</div>
+<p>Did it have trouble? If so, try an extra optimization run and see if that’s sufficient:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb32"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>fit_spatial <span class="ot">&lt;-</span> <span class="fu">run_extra_optimization</span>(fit_spatial)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>attempting to improve convergence with Newton update(s)
+retaining parameters from before Newton update
+and skipping further Newton updates</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb34"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a><span class="fu">sanity</span>(fit_spatial)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ Non-linear minimizer suggests successful convergence
+✔ Hessian matrix is positive definite
+✔ No extreme or very small eigenvalues detected
+✖ `thetaf` gradient &gt; 0.001
+ℹ See ?run_extra_optimization(), standardize covariates, and/or simplify the model</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ No fixed-effect standard errors are NA
+✔ No standard errors look unreasonably large
+✔ No sigma parameters are &lt; 0.01
+✔ No sigma parameters are &gt; 100
+✔ Range parameter doesn't look unreasonably large</code></pre>
+</div>
+</div>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb37"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a>fit_spatial</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Spatial model fit by ML ['sdmTMB']
+Formula: density ~ 1
+Mesh: mesh (isotropic covariance)
+Data: dat
+Family: tweedie(link = 'log')
+ 
+Conditional model:
+            coef.est coef.se
+(Intercept)    -1.97    0.57
+
+Dispersion parameter: 2.78
+Tweedie p: 1.75
+Matérn range: 28.16
+Spatial SD: 2.25
+ML criterion at convergence: 1350.663
+
+See ?tidy.sdmTMB to extract these values as a data frame.
+
+**Possible issues detected! Check output of sanity().**</code></pre>
+</div>
+</div>
+<p>We won’t dwell on this model here for the sake of time, but in practice we would stop, inspect, and understand this model before progressing to a spatiotemporal model.</p>
+</section>
+<section id="fitting-a-model-with-spatial-spatiotemporal-fields" class="level1">
+<h1>Fitting a model with spatial + spatiotemporal fields</h1>
+<p>This first model includes a quadratic effect of log depth (<code>poly(log_depth, 2)</code>), a factor effect for each year, and models total density using a Tweedie distribution and a log link. The spatial field and spatiotemporal fields are estimated.</p>
+<p>The year factors give each year its own mean (this is generally the approach used in fisheries stock assessment). The <code>0 +</code> omits the intercept such that each year’s estimate represents a mean as opposed to a difference from the intercept. This part is arbitrary and chosen for the sake of this exercise.</p>
+<p>The choice to use log depth helps the model fit because we have fewer samples from the deeper depths.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb39"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a>fit <span class="ot">&lt;-</span> <span class="fu">sdmTMB</span>(</span>
+<span id="cb39-2"><a href="#cb39-2" aria-hidden="true" tabindex="-1"></a>  density <span class="sc">~</span> <span class="dv">0</span> <span class="sc">+</span> year_factor <span class="sc">+</span> <span class="fu">poly</span>(log_depth, <span class="dv">2</span>),</span>
+<span id="cb39-3"><a href="#cb39-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">data =</span> dat,</span>
+<span id="cb39-4"><a href="#cb39-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">family =</span> <span class="fu">tweedie</span>(<span class="at">link =</span> <span class="st">"log"</span>),</span>
+<span id="cb39-5"><a href="#cb39-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">mesh =</span> mesh,</span>
+<span id="cb39-6"><a href="#cb39-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">spatial =</span> <span class="st">"on"</span>,</span>
+<span id="cb39-7"><a href="#cb39-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">spatiotemporal =</span> <span class="st">"iid"</span>, <span class="co">#&lt; new</span></span>
+<span id="cb39-8"><a href="#cb39-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">time =</span> <span class="st">"year"</span>, <span class="co">#&lt; new</span></span>
+<span id="cb39-9"><a href="#cb39-9" aria-hidden="true" tabindex="-1"></a>  <span class="co"># silent = FALSE</span></span>
+<span id="cb39-10"><a href="#cb39-10" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>Print the model:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb40"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a>fit</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Spatiotemporal model fit by ML ['sdmTMB']
+Formula: density ~ 0 + year_factor + poly(log_depth, 2)
+Mesh: mesh (isotropic covariance)
+Time column: character
+Data: dat
+Family: tweedie(link = 'log')
+ 
+Conditional model:
+                    coef.est coef.se
+year_factor2004        -1.65    0.50
+year_factor2006        -1.39    0.47
+year_factor2008        -2.40    0.49
+year_factor2010        -1.43    0.49
+year_factor2012        -2.85    0.50
+year_factor2014        -2.97    0.51
+year_factor2016        -2.89    0.50
+year_factor2018        -2.68    0.47
+year_factor2021        -4.54    0.52
+poly(log_depth, 2)1   -27.19    4.96
+poly(log_depth, 2)2   -25.14    3.23
+
+Dispersion parameter: 0.96
+Tweedie p: 1.62
+Matérn range: 25.42
+Spatial SD: 1.23
+Spatiotemporal IID SD: 1.86
+ML criterion at convergence: 927.045
+
+See ?tidy.sdmTMB to extract these values as a data frame.</code></pre>
+</div>
+</div>
+<p>Run a basic sanity check on the model:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb42"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a><span class="fu">sanity</span>(fit)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ Non-linear minimizer suggests successful convergence</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ Hessian matrix is positive definite</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ No extreme or very small eigenvalues detected</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ No gradients with respect to fixed effects are &gt;= 0.001</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ No fixed-effect standard errors are NA</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ No standard errors look unreasonably large</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ No sigma parameters are &lt; 0.01</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ No sigma parameters are &gt; 100</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ Range parameter doesn't look unreasonably large</code></pre>
+</div>
+</div>
+<p>There are multiple ways we can plot the depth effect on density. The first approach is to pass the sdmTMB object to the visreg package. This shows the conditional effect, where all values other than depth are held at a particular value. Note the default visreg plot is in link (here, log) space and the dots are randomized quantile residuals.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb52"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb52-1"><a href="#cb52-1" aria-hidden="true" tabindex="-1"></a>visreg<span class="sc">::</span><span class="fu">visreg</span>(fit, <span class="at">xvar =</span> <span class="st">"log_depth"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-18-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+<div class="sourceCode cell-code" id="cb53"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb53-1"><a href="#cb53-1" aria-hidden="true" tabindex="-1"></a>visreg<span class="sc">::</span><span class="fu">visreg</span>(fit, <span class="at">xvar =</span> <span class="st">"log_depth"</span>, <span class="at">scale =</span> <span class="st">"response"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-18-2.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Second, we could use the <code>ggeffects</code> package, which can be used to show the marginal effects of predictors (averaging over all other covariates rather than using a single fixed value). For more details see the <a href="https://pbs-assess.github.io/sdmTMB/articles/ggeffects.html">visualizing marginal effects vignette</a>. <em>Note that won’t yet work with smoother <code>s()</code> terms</em>, but will soon work with the similar <code>ggeffects::ggpredict()</code> .</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb54"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb54-1"><a href="#cb54-1" aria-hidden="true" tabindex="-1"></a>g <span class="ot">&lt;-</span> ggeffects<span class="sc">::</span><span class="fu">ggeffect</span>(fit, <span class="st">"log_depth [3.5:6.7 by=0.05]"</span>)</span>
+<span id="cb54-2"><a href="#cb54-2" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(g)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-19-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="prediction" class="level1">
+<h1>Prediction</h1>
+<p>Let’s now predict on a grid that covers the entire survey (<code>wcvi_grid</code>).</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb55"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb55-1"><a href="#cb55-1" aria-hidden="true" tabindex="-1"></a>wcvi_grid <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(here<span class="sc">::</span><span class="fu">here</span>(<span class="st">"uw-survey-2026/data/wcvi-grid.rds"</span>))</span>
+<span id="cb55-2"><a href="#cb55-2" aria-hidden="true" tabindex="-1"></a><span class="fu">head</span>(wcvi_grid)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>         X        Y depth cell_area
+1 733.9852 5346.334   447         4
+2 735.9852 5346.334   442         4
+3 737.9852 5346.334   433         4
+4 735.9852 5348.334   312         4
+5 737.9852 5348.334   295         4
+6 739.9852 5348.334   400         4</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb57"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb57-1"><a href="#cb57-1" aria-hidden="true" tabindex="-1"></a>wcvi_grid<span class="sc">$</span>log_depth <span class="ot">&lt;-</span> <span class="fu">log</span>(wcvi_grid<span class="sc">$</span>depth)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>We want to then to expand our grid to every year we want to predict on:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb58"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb58-1"><a href="#cb58-1" aria-hidden="true" tabindex="-1"></a>grid <span class="ot">&lt;-</span> <span class="fu">replicate_df</span>(wcvi_grid, <span class="st">"year"</span>, <span class="fu">unique</span>(dat<span class="sc">$</span>year))</span>
+<span id="cb58-2"><a href="#cb58-2" aria-hidden="true" tabindex="-1"></a>grid<span class="sc">$</span>year_factor <span class="ot">&lt;-</span> <span class="fu">as.factor</span>(grid<span class="sc">$</span>year)</span>
+<span id="cb58-3"><a href="#cb58-3" aria-hidden="true" tabindex="-1"></a><span class="fu">head</span>(grid)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>         X        Y depth cell_area log_depth year year_factor
+1 733.9852 5346.334   447         4  6.102559 2004        2004
+2 735.9852 5346.334   442         4  6.091310 2004        2004
+3 737.9852 5346.334   433         4  6.070738 2004        2004
+4 735.9852 5348.334   312         4  5.743003 2004        2004
+5 737.9852 5348.334   295         4  5.686975 2004        2004
+6 739.9852 5348.334   400         4  5.991465 2004        2004</code></pre>
+</div>
+</div>
+<p>We can predict on the original data:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb60"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb60-1"><a href="#cb60-1" aria-hidden="true" tabindex="-1"></a>p0 <span class="ot">&lt;-</span> <span class="fu">predict</span>(fit)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>To predict on a new data frame, we can specify <code>newdata</code>. Here, we will predict on the survey grid. (1) This makes it easy to make visualizations. (2) This will be useful if we wanted to generate an area-weighted standardized population index later.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb61"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb61-1"><a href="#cb61-1" aria-hidden="true" tabindex="-1"></a>p <span class="ot">&lt;-</span> <span class="fu">predict</span>(fit, <span class="at">newdata =</span> grid)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>We can plot each of the components of the prediction data frame spatially:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb62"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb62-1"><a href="#cb62-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Depth and year effect contribution:</span></span>
+<span id="cb62-2"><a href="#cb62-2" aria-hidden="true" tabindex="-1"></a><span class="co"># (Everything not a random field)</span></span>
+<span id="cb62-3"><a href="#cb62-3" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(p, <span class="fu">aes</span>(X, Y, <span class="at">fill =</span> <span class="fu">exp</span>(est_non_rf))) <span class="sc">+</span></span>
+<span id="cb62-4"><a href="#cb62-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span>year) <span class="sc">+</span></span>
+<span id="cb62-5"><a href="#cb62-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_raster</span>() <span class="sc">+</span></span>
+<span id="cb62-6"><a href="#cb62-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">coord_fixed</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-24-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+<div class="sourceCode cell-code" id="cb63"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb63-1"><a href="#cb63-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Spatial random field:</span></span>
+<span id="cb63-2"><a href="#cb63-2" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(p, <span class="fu">aes</span>(X, Y, <span class="at">fill =</span> omega_s)) <span class="sc">+</span></span>
+<span id="cb63-3"><a href="#cb63-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span>year) <span class="sc">+</span></span>
+<span id="cb63-4"><a href="#cb63-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_raster</span>() <span class="sc">+</span></span>
+<span id="cb63-5"><a href="#cb63-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_fill_gradient2</span>() <span class="sc">+</span></span>
+<span id="cb63-6"><a href="#cb63-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">coord_fixed</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-24-2.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+<div class="sourceCode cell-code" id="cb64"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb64-1"><a href="#cb64-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Spatial-temporal random field:</span></span>
+<span id="cb64-2"><a href="#cb64-2" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(p, <span class="fu">aes</span>(X, Y, <span class="at">fill =</span> epsilon_st)) <span class="sc">+</span></span>
+<span id="cb64-3"><a href="#cb64-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span>year) <span class="sc">+</span></span>
+<span id="cb64-4"><a href="#cb64-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_raster</span>() <span class="sc">+</span></span>
+<span id="cb64-5"><a href="#cb64-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_fill_gradient2</span>() <span class="sc">+</span></span>
+<span id="cb64-6"><a href="#cb64-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">coord_fixed</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-24-3.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+<div class="sourceCode cell-code" id="cb65"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb65-1"><a href="#cb65-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Overall estimate of density in link (log) space:</span></span>
+<span id="cb65-2"><a href="#cb65-2" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(p, <span class="fu">aes</span>(X, Y, <span class="at">fill =</span> est)) <span class="sc">+</span></span>
+<span id="cb65-3"><a href="#cb65-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span>year) <span class="sc">+</span></span>
+<span id="cb65-4"><a href="#cb65-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_raster</span>() <span class="sc">+</span></span>
+<span id="cb65-5"><a href="#cb65-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">coord_fixed</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-24-4.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+<div class="sourceCode cell-code" id="cb66"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb66-1"><a href="#cb66-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Overall estimate of density: (with log-distributed colour)</span></span>
+<span id="cb66-2"><a href="#cb66-2" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(p, <span class="fu">aes</span>(X, Y, <span class="at">fill =</span> <span class="fu">exp</span>(est))) <span class="sc">+</span></span>
+<span id="cb66-3"><a href="#cb66-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span>year) <span class="sc">+</span></span>
+<span id="cb66-4"><a href="#cb66-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_raster</span>() <span class="sc">+</span></span>
+<span id="cb66-5"><a href="#cb66-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">coord_fixed</span>() <span class="sc">+</span></span>
+<span id="cb66-6"><a href="#cb66-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_fill_viridis_c</span>(<span class="at">trans =</span> <span class="st">"log10"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-24-5.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="residual-checking" class="level1">
+<h1>Residual checking</h1>
+<p>We can calculate randomized quantile residuals with the <code>residuals.sdmTMB()</code> function.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb67"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb67-1"><a href="#cb67-1" aria-hidden="true" tabindex="-1"></a>dat<span class="sc">$</span>resid <span class="ot">&lt;-</span> <span class="fu">residuals</span>(fit)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>We can plot those residuals spatially:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb68"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb68-1"><a href="#cb68-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(dat, <span class="fu">aes</span>(X, Y, <span class="at">colour =</span> resid)) <span class="sc">+</span></span>
+<span id="cb68-2"><a href="#cb68-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span>year) <span class="sc">+</span></span>
+<span id="cb68-3"><a href="#cb68-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>(<span class="at">size =</span> <span class="fl">0.5</span>) <span class="sc">+</span></span>
+<span id="cb68-4"><a href="#cb68-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">coord_fixed</span>() <span class="sc">+</span></span>
+<span id="cb68-5"><a href="#cb68-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_colour_gradient2</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-26-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+<section id="exercise-1" class="level2">
+<h2 class="anchored" data-anchor-id="exercise-1">Exercise:</h2>
+<ol type="1">
+<li>What are you looking for in the above? Does it look OK?</li>
+</ol>
+<p>We can check the distribution of the residuals with a QQ plot:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb69"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb69-1"><a href="#cb69-1" aria-hidden="true" tabindex="-1"></a><span class="fu">qqnorm</span>(dat<span class="sc">$</span>resid)</span>
+<span id="cb69-2"><a href="#cb69-2" aria-hidden="true" tabindex="-1"></a><span class="fu">qqline</span>(dat<span class="sc">$</span>resid)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-27-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>These don’t look great, <em>but</em>, this is largely a function of error from the Laplace approximation on the random effects (see <a href="https://doi.org/10.1007/s10651-017-0372-4">Thygesen et al.&nbsp;2017</a>). MCMC-based are a better approach, but are slower. There’s a whole vignette on residual checking with sdmTMB here: <a href="https://pbs-assess.github.io/sdmTMB/articles/residual-checking.html" class="uri">https://pbs-assess.github.io/sdmTMB/articles/residual-checking.html</a></p>
+</section>
+</section>
+<section id="fitting-an-anisotropic-model" class="level1">
+<h1>Fitting an anisotropic model</h1>
+<p>We will re-fit our model with REML so we can use AIC to compare models with different random effect structures (although not strictly necessary). The model that we fit above assumes isotropy, where correlation decays in all directions at same rate (this is the default behavior). We will compare this fit of the isotropic model to a model assuming anisotropy, or directionally dependent spatial correlation.</p>
+<p>We will use the handy method <code>update()</code> here, but we could also re-write the whole <code>sdmTMB()</code> function call each time.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb70"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb70-1"><a href="#cb70-1" aria-hidden="true" tabindex="-1"></a>fit_reml <span class="ot">&lt;-</span> <span class="fu">update</span>(fit, <span class="at">reml =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb70-2"><a href="#cb70-2" aria-hidden="true" tabindex="-1"></a>fit_aniso <span class="ot">&lt;-</span> <span class="fu">update</span>(fit, <span class="at">reml =</span> <span class="cn">TRUE</span>, <span class="at">anisotropy =</span> <span class="cn">TRUE</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb71"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb71-1"><a href="#cb71-1" aria-hidden="true" tabindex="-1"></a><span class="fu">sanity</span>(fit_reml)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ Non-linear minimizer suggests successful convergence</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ Hessian matrix is positive definite</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ No extreme or very small eigenvalues detected</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ No gradients with respect to fixed effects are &gt;= 0.001</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ No fixed-effect standard errors are NA</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ No standard errors look unreasonably large</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ No sigma parameters are &lt; 0.01</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ No sigma parameters are &gt; 100</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ Range parameter doesn't look unreasonably large</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb81"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb81-1"><a href="#cb81-1" aria-hidden="true" tabindex="-1"></a><span class="fu">sanity</span>(fit_aniso)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ Non-linear minimizer suggests successful convergence</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ Hessian matrix is positive definite</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ No extreme or very small eigenvalues detected</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ No gradients with respect to fixed effects are &gt;= 0.001</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ No fixed-effect standard errors are NA</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ No standard errors look unreasonably large</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ No sigma parameters are &lt; 0.01</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>✔ No sigma parameters are &gt; 100</code></pre>
+</div>
+</div>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb90"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb90-1"><a href="#cb90-1" aria-hidden="true" tabindex="-1"></a>fit_reml</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Spatiotemporal model fit by REML ['sdmTMB']
+Formula: density ~ 0 + year_factor + poly(log_depth, 2)
+Mesh: sdmTMBmesh (isotropic covariance)
+Time column: character
+Data: tbl_df
+Family: tweedie(link = 'log')
+ 
+Conditional model:
+                    coef.est coef.se
+year_factor2004        -1.73    0.55
+year_factor2006        -1.45    0.52
+year_factor2008        -2.49    0.54
+year_factor2010        -1.50    0.54
+year_factor2012        -2.93    0.55
+year_factor2014        -3.06    0.56
+year_factor2016        -2.97    0.55
+year_factor2018        -2.76    0.52
+year_factor2021        -4.62    0.57
+poly(log_depth, 2)1   -28.71    5.12
+poly(log_depth, 2)2   -24.78    3.30
+
+Dispersion parameter: 0.96
+Tweedie p: 1.62
+Matérn range: 28.28
+Spatial SD: 1.28
+Spatiotemporal IID SD: 1.89
+REML criterion at convergence: 921.000
+
+See ?tidy.sdmTMB to extract these values as a data frame.</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb92"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb92-1"><a href="#cb92-1" aria-hidden="true" tabindex="-1"></a>fit_aniso</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Spatiotemporal model fit by REML ['sdmTMB']
+Formula: density ~ 0 + year_factor + poly(log_depth, 2)
+Mesh: sdmTMBmesh (anisotropic covariance)
+Time column: character
+Data: tbl_df
+Family: tweedie(link = 'log')
+ 
+Conditional model:
+                    coef.est coef.se
+year_factor2004        -1.75    0.58
+year_factor2006        -1.48    0.55
+year_factor2008        -2.51    0.57
+year_factor2010        -1.42    0.56
+year_factor2012        -3.10    0.58
+year_factor2014        -3.08    0.59
+year_factor2016        -3.05    0.58
+year_factor2018        -2.89    0.55
+year_factor2021        -4.69    0.60
+poly(log_depth, 2)1   -32.04    5.19
+poly(log_depth, 2)2   -23.56    3.28
+
+Dispersion parameter: 0.96
+Tweedie p: 1.62
+Matérn anisotropic range (spatial): 9.7 to 67.1 at 123 deg.
+Spatial SD: 1.51
+Spatiotemporal IID SD: 2.12
+REML criterion at convergence: 910.066
+
+See ?tidy.sdmTMB to extract these values as a data frame.
+See ?plot_anisotropy to plot the anisotropic range.</code></pre>
+</div>
+</div>
+<p>Anisotropic range is best examined graphically:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb94"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb94-1"><a href="#cb94-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_anisotropy</span>(fit_aniso)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-31-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Notice how the correlation occurs over longer distances along the NW/SE plane than the NE/SW plane. In contrast, the correlation distance is constant in all dimensions in our initial (isotropic) model. In other words, if we were to make a similar plot to the above for the isotropic model, it would be a circle whose radius is the estimated spatial range.</p>
+<p>We can check the AIC of the 2 models:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb95"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb95-1"><a href="#cb95-1" aria-hidden="true" tabindex="-1"></a><span class="fu">AIC</span>(fit_reml, fit_aniso)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>          df      AIC
+fit_reml  16 1874.000
+fit_aniso 18 1856.132</code></pre>
+</div>
+</div>
+<p>Note that anisotropy is often important to include when predicting to regions with a strong directional gradient in a (modeled or latent) habitat covariate, such as depth along a narrow continental shelf.</p>
+<section id="exercise-2" class="level2">
+<h2 class="anchored" data-anchor-id="exercise-2">Exercise:</h2>
+<ol type="1">
+<li>What does AIC suggest? (Keep in mind AIC is a bit suspect for these kinds of models with correlated random effects, often selects more complicated models, and shouldn’t be taken <em>too</em> seriously.) Generally, cross-validation and other methods are better for model comparison of mixed effect models, but that is beyond the scope of this lesson. For more information, see this vignette on cross-validation: <a href="https://pbs-assess.github.io/sdmTMB/articles/web_only/cross-validation.html" class="uri">https://pbs-assess.github.io/sdmTMB/articles/web_only/cross-validation.html</a></li>
+</ol>
+</section>
+</section>
+<section id="index-standardization" class="level1">
+<h1>Index standardization</h1>
+<p>To calculate an index from any of these models, we need to run the <code>predict.sdmTMB()</code> function with the argument <code>return_tmb_object = TRUE</code>. We can then run the <code>get_index()</code> function to extract the total biomass calculations and standard errors.</p>
+<p>We can set the area argument to our <code>cell_area</code> column in km<sup>2</sup>. In this case the value is 4 km<sup>2</sup> for all of the cells, since our grid cells are 2 km x 2 km. If some grid cells were not fully in the survey domain (or were on land), we could feed a vector of grid areas to the area argument that matched the number of grid cells. Because the density units are tonnes per km<sup>2</sup> for this data, the index is in tonnes.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb97"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb97-1"><a href="#cb97-1" aria-hidden="true" tabindex="-1"></a>p <span class="ot">&lt;-</span> <span class="fu">predict</span>(fit, <span class="at">newdata =</span> grid, <span class="at">return_tmb_object =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb97-2"><a href="#cb97-2" aria-hidden="true" tabindex="-1"></a>index <span class="ot">&lt;-</span> <span class="fu">get_index</span>(p, <span class="at">area =</span> grid<span class="sc">$</span>cell_area, <span class="at">bias_correct =</span> <span class="cn">FALSE</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Bias correction is turned off.
+It is recommended to turn this on for final inference.</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb99"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb99-1"><a href="#cb99-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(index, <span class="fu">aes</span>(year, est)) <span class="sc">+</span></span>
+<span id="cb99-2"><a href="#cb99-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_line</span>() <span class="sc">+</span></span>
+<span id="cb99-3"><a href="#cb99-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_ribbon</span>(<span class="fu">aes</span>(<span class="at">ymin =</span> lwr, <span class="at">ymax =</span> upr), <span class="at">alpha =</span> <span class="fl">0.4</span>) <span class="sc">+</span></span>
+<span id="cb99-4"><a href="#cb99-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">xlab</span>(<span class="st">"Year"</span>) <span class="sc">+</span></span>
+<span id="cb99-5"><a href="#cb99-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ylab</span>(<span class="st">"Biomass estimate (tonnes)"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-33-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>We used <code>bias_correction = FALSE</code> to speed things up, but for any final result you will want to use the bias correction. Let’s see how much the scale of the index changes with bias correction.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb100"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb100-1"><a href="#cb100-1" aria-hidden="true" tabindex="-1"></a>index_c <span class="ot">&lt;-</span> <span class="fu">get_index</span>(p, <span class="at">area =</span> grid<span class="sc">$</span>cell_area, <span class="at">bias_correct =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb100-2"><a href="#cb100-2" aria-hidden="true" tabindex="-1"></a>index_c<span class="sc">$</span>Method <span class="ot">&lt;-</span> <span class="st">"Bias correction"</span></span>
+<span id="cb100-3"><a href="#cb100-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb100-4"><a href="#cb100-4" aria-hidden="true" tabindex="-1"></a><span class="fu">bind_rows</span>(index, index_c) <span class="sc">%&gt;%</span></span>
+<span id="cb100-5"><a href="#cb100-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(year, est, <span class="at">fill =</span> Method)) <span class="sc">+</span></span>
+<span id="cb100-6"><a href="#cb100-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">colour =</span> Method)) <span class="sc">+</span></span>
+<span id="cb100-7"><a href="#cb100-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_ribbon</span>(<span class="fu">aes</span>(<span class="at">ymin =</span> lwr, <span class="at">ymax =</span> upr), <span class="at">alpha =</span> <span class="fl">0.4</span>) <span class="sc">+</span></span>
+<span id="cb100-8"><a href="#cb100-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">xlab</span>(<span class="st">"Year"</span>) <span class="sc">+</span></span>
+<span id="cb100-9"><a href="#cb100-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ylab</span>(<span class="st">"Biomass estimate (tonnes)"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-34-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="fit-a-few-gams-and-estimate-an-abundance-index" class="level1">
+<h1>Fit a few GAMs and estimate an abundance index</h1>
+<p>Include a covariate (depth)</p>
+<p>Analogous to nonspatial model (spatial = “off”, spatiotemporal = “off”)</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb101"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb101-1"><a href="#cb101-1" aria-hidden="true" tabindex="-1"></a>fit_gam <span class="ot">&lt;-</span> <span class="fu">gam</span>(</span>
+<span id="cb101-2"><a href="#cb101-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">formula =</span> density <span class="sc">~</span> <span class="fu">s</span>(depth) <span class="sc">+</span> <span class="fu">as.factor</span>(year),</span>
+<span id="cb101-3"><a href="#cb101-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">family =</span> <span class="fu">tw</span>(<span class="at">link =</span> <span class="st">"log"</span>),</span>
+<span id="cb101-4"><a href="#cb101-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">data =</span> dat</span>
+<span id="cb101-5"><a href="#cb101-5" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>Get model summary</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb102"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb102-1"><a href="#cb102-1" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(fit_gam)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+Family: Tweedie(p=1.774) 
+Link function: log 
+
+Formula:
+density ~ s(depth) + as.factor(year)
+
+Parametric coefficients:
+                    Estimate Std. Error t value Pr(&gt;|t|)    
+(Intercept)          0.27065    0.18516   1.462 0.144063    
+as.factor(year)2006 -0.05975    0.22925  -0.261 0.794428    
+as.factor(year)2008 -0.76845    0.23890  -3.217 0.001329 ** 
+as.factor(year)2010 -0.04164    0.23998  -0.174 0.862282    
+as.factor(year)2012 -0.81548    0.24119  -3.381 0.000743 ***
+as.factor(year)2014 -1.44824    0.24918  -5.812 7.73e-09 ***
+as.factor(year)2016 -1.70452    0.25788  -6.610 5.58e-11 ***
+as.factor(year)2018 -1.09290    0.23257  -4.699 2.89e-06 ***
+as.factor(year)2021 -3.17636    0.26604 -11.939  &lt; 2e-16 ***
+---
+Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+Approximate significance of smooth terms:
+          edf Ref.df     F p-value    
+s(depth) 6.98  7.942 43.94  &lt;2e-16 ***
+---
+Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+R-sq.(adj) =  -0.0081   Deviance explained = 22.6%
+-REML = 1366.3  Scale est. = 3.2903    n = 1333</code></pre>
+</div>
+</div>
+<p>Plot partial effects of covariates</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb104"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb104-1"><a href="#cb104-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(fit_gam, <span class="at">shade =</span> <span class="cn">TRUE</span>, <span class="at">residuals =</span> <span class="cn">TRUE</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-37-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Get diagnostics and perform model checking</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb105"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb105-1"><a href="#cb105-1" aria-hidden="true" tabindex="-1"></a><span class="fu">gam.check</span>(fit_gam)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-38-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+Method: REML   Optimizer: outer newton
+full convergence after 6 iterations.
+Gradient range [-0.000384596,0.0002966339]
+(score 1366.29 &amp; scale 3.290291).
+Hessian positive definite, eigenvalue range [1.556548,1471.969].
+Model rank =  18 / 18 
+
+Basis dimension (k) checking results. Low p-value (k-index&lt;1) may
+indicate that k is too low, especially if edf is close to k'.
+
+           k'  edf k-index p-value    
+s(depth) 9.00 6.98     0.6  &lt;2e-16 ***
+---
+Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1</code></pre>
+</div>
+</div>
+<p>Review console output to help verify convergence, and whether there were an adequate number of basis functions (k).</p>
+<p>Examine the four diagnostic plots. Each of these gives a different way of looking at your model residuals. On the top-left is a Q-Q plot, which compares the model residuals to the expected/assumed distribution family. A well-fit model’s residuals will be close to the 1-1 line, otherwise there may be under- or over-dispersion present. On bottom left is a histogram of residuals. We want this to have a shape similar to the distribution family we specified. On top-right is a plot of residual values as a function of the linear predictor. These should be evenly distributed around zero in a well-fitted model. Finally, on the bottom-right is plot of response against fitted values. A well-fitted model would show values near the 1-1 line.</p>
+</section>
+<section id="predict-to-survey-area-new-data" class="level1">
+<h1>Predict to survey area (new data)</h1>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb107"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb107-1"><a href="#cb107-1" aria-hidden="true" tabindex="-1"></a>pred_gam <span class="ot">&lt;-</span> <span class="fu">predict</span>(fit_gam, <span class="at">type =</span> <span class="st">"response"</span>, <span class="at">newdata =</span> grid)</span>
+<span id="cb107-2"><a href="#cb107-2" aria-hidden="true" tabindex="-1"></a>pred_gam_df <span class="ot">&lt;-</span> <span class="fu">cbind</span>(grid, pred_gam)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>Plot predictions over survey area</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb108"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb108-1"><a href="#cb108-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(pred_gam_df, <span class="fu">aes</span>(X, Y, <span class="at">fill =</span> pred_gam)) <span class="sc">+</span> <span class="fu">geom_raster</span>() <span class="sc">+</span></span>
+<span id="cb108-2"><a href="#cb108-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_fill_viridis_c</span>() <span class="sc">+</span> <span class="fu">facet_wrap</span>(<span class="sc">~</span>year) <span class="sc">+</span> <span class="fu">coord_fixed</span>() <span class="sc">+</span></span>
+<span id="cb108-3"><a href="#cb108-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">fill =</span> <span class="st">"Log Biomass density</span><span class="sc">\n</span><span class="st">(kg/km^2)"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-40-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="calculate-biomass-index-from-gam-via-simulation" class="level1">
+<h1>Calculate biomass index from GAM via simulation</h1>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb109"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb109-1"><a href="#cb109-1" aria-hidden="true" tabindex="-1"></a>sims <span class="ot">&lt;-</span> gratia<span class="sc">::</span><span class="fu">fitted_samples</span>(fit_gam, <span class="at">n=</span><span class="dv">10</span>, <span class="at">newdata=</span>grid, </span>
+<span id="cb109-2"><a href="#cb109-2" aria-hidden="true" tabindex="-1"></a>                               <span class="at">scale=</span><span class="st">"response"</span>, <span class="at">seed=</span><span class="dv">9</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Use of the `newdata` argument is deprecated.
+Instead, use the data argument `data`.</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb111"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb111-1"><a href="#cb111-1" aria-hidden="true" tabindex="-1"></a>sims<span class="sc">$</span>year <span class="ot">&lt;-</span> grid<span class="sc">$</span>year[sims<span class="sc">$</span>.row]</span>
+<span id="cb111-2"><a href="#cb111-2" aria-hidden="true" tabindex="-1"></a>sims<span class="sc">$</span>biomass <span class="ot">&lt;-</span> sims<span class="sc">$</span>.fitted <span class="sc">*</span> <span class="dv">4</span> <span class="co"># expand from density to biomass, given area</span></span>
+<span id="cb111-3"><a href="#cb111-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb111-4"><a href="#cb111-4" aria-hidden="true" tabindex="-1"></a>level <span class="ot">&lt;-</span> <span class="fl">0.95</span> <span class="co"># specify probability for confidence interval</span></span>
+<span id="cb111-5"><a href="#cb111-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb111-6"><a href="#cb111-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Get sum of simulated biomass (density*area) across grid cells, with CI</span></span>
+<span id="cb111-7"><a href="#cb111-7" aria-hidden="true" tabindex="-1"></a>lwr_fn <span class="ot">&lt;-</span> <span class="cf">function</span>(x) {<span class="fu">as.numeric</span>(<span class="fu">quantile</span>(x, <span class="at">probs =</span> (<span class="dv">1</span> <span class="sc">-</span> level) <span class="sc">/</span> <span class="dv">2</span>))}</span>
+<span id="cb111-8"><a href="#cb111-8" aria-hidden="true" tabindex="-1"></a>upr_fn <span class="ot">&lt;-</span> <span class="cf">function</span>(x) {<span class="fu">as.numeric</span>(<span class="fu">quantile</span>(x, <span class="at">probs =</span> <span class="dv">1</span> <span class="sc">-</span> (<span class="dv">1</span> <span class="sc">-</span> level) <span class="sc">/</span> <span class="dv">2</span>))}</span>
+<span id="cb111-9"><a href="#cb111-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb111-10"><a href="#cb111-10" aria-hidden="true" tabindex="-1"></a>sims_sum <span class="ot">&lt;-</span>  sims <span class="sc">%&gt;%</span> </span>
+<span id="cb111-11"><a href="#cb111-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(year,.draw) <span class="sc">%&gt;%</span> </span>
+<span id="cb111-12"><a href="#cb111-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarise_at</span>(<span class="st">"biomass"</span>, <span class="fu">list</span>(<span class="at">biomass =</span> sum)) <span class="sc">%&gt;%</span></span>
+<span id="cb111-13"><a href="#cb111-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(year) <span class="sc">%&gt;%</span></span>
+<span id="cb111-14"><a href="#cb111-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarise_at</span>(<span class="st">"biomass"</span>, <span class="fu">list</span>(<span class="at">est =</span> median, <span class="co"># could use mean</span></span>
+<span id="cb111-15"><a href="#cb111-15" aria-hidden="true" tabindex="-1"></a>                           <span class="at">lwr =</span> lwr_fn,</span>
+<span id="cb111-16"><a href="#cb111-16" aria-hidden="true" tabindex="-1"></a>                           <span class="at">upr =</span> upr_fn))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>Note that this approach uses a Gaussian approximation to the posterior, which is all that is implemented currently in the gratia package. However, a better estimate of uncertainty could be derived from sampling from the actual posterior distribution. However, this is beyond the scope of today’s lesson.</p>
+<p>Plot the biomass index</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb112"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb112-1"><a href="#cb112-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(sims_sum, <span class="fu">aes</span>(year, est)) <span class="sc">+</span> <span class="fu">geom_line</span>() <span class="sc">+</span></span>
+<span id="cb112-2"><a href="#cb112-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_ribbon</span>(<span class="fu">aes</span>(<span class="at">ymin =</span> lwr, <span class="at">ymax =</span> upr), <span class="at">alpha =</span> <span class="fl">0.4</span>) <span class="sc">+</span></span>
+<span id="cb112-3"><a href="#cb112-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">xlab</span>(<span class="st">'Year'</span>) <span class="sc">+</span> <span class="fu">ylab</span>(<span class="st">'Biomass estimate (kg)'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-42-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="fit-a-gam-analogous-to-a-spatial-model-in-sdmtmb" class="level1">
+<h1>Fit a GAM analogous to a spatial model in sdmTMB</h1>
+<p>Include a 2-D smooth over space</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb113"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb113-1"><a href="#cb113-1" aria-hidden="true" tabindex="-1"></a>fit_gam_s <span class="ot">&lt;-</span> <span class="fu">gam</span>(</span>
+<span id="cb113-2"><a href="#cb113-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">formula =</span> density <span class="sc">~</span> <span class="fu">s</span>(depth) <span class="sc">+</span> <span class="fu">as.factor</span>(year) <span class="sc">+</span> </span>
+<span id="cb113-3"><a href="#cb113-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">s</span>(X,Y), <span class="co">#&lt;&lt;</span></span>
+<span id="cb113-4"><a href="#cb113-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">family =</span> <span class="fu">tw</span>(<span class="at">link =</span> <span class="st">"log"</span>),</span>
+<span id="cb113-5"><a href="#cb113-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">data =</span> dat</span>
+<span id="cb113-6"><a href="#cb113-6" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>Visualize smooths, where the first plot shows the 1-D smooth on depth and the second plot shows the 2-D (or bivariate) spatial smooth</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb114"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb114-1"><a href="#cb114-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(fit_gam_s)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-44-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-44-2.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>or</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb115"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb115-1"><a href="#cb115-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(fit_gam_s, <span class="at">scheme =</span> <span class="dv">1</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-45-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-45-2.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>or</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb116"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb116-1"><a href="#cb116-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(fit_gam_s, <span class="at">scheme =</span> <span class="dv">2</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-46-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02-exercise_files/figure-html/unnamed-chunk-46-2.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Note that you may have to play around with these types of visualizations because 2-D smooths can be tough to visualize. Also see the vis.gam package for more options.</p>
+</section>
+<section id="fit-a-gam-analogous-to-a-spatiotemporal-model-in-sdmtmb" class="level1">
+<h1>Fit a GAM analogous to a spatiotemporal model in sdmTMB</h1>
+<p>Include a 2-D smooth over space for each year</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb117"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb117-1"><a href="#cb117-1" aria-hidden="true" tabindex="-1"></a>fit_gam_st <span class="ot">&lt;-</span> <span class="fu">gam</span>(</span>
+<span id="cb117-2"><a href="#cb117-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">formula =</span> density <span class="sc">~</span> <span class="fu">s</span>(depth) <span class="sc">+</span> <span class="fu">as.factor</span>(year) <span class="sc">+</span></span>
+<span id="cb117-3"><a href="#cb117-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">s</span>(X,Y, <span class="at">by =</span> year), <span class="co">#&lt;&lt;</span></span>
+<span id="cb117-4"><a href="#cb117-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">family =</span> <span class="fu">tw</span>(<span class="at">link =</span> <span class="st">"log"</span>),</span>
+<span id="cb117-5"><a href="#cb117-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">data =</span> dat)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<section id="exercise-3" class="level3">
+<h3 class="anchored" data-anchor-id="exercise-3">Exercise:</h3>
+<ol type="1">
+<li>Try fitting similar models and estimating indices from your own data. Do a lot of data visualization and consider different distribution families (e.g.&nbsp;Gaussian).</li>
+</ol>
+<p>Don’t hesitate to ask questions!</p>
+</section>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
+    }
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const isCodeAnnotation = (el) => {
+    for (const clz of el.classList) {
+      if (clz.startsWith('code-annotation-')) {                     
+        return true;
+      }
+    }
+    return false;
+  }
+  const onCopySuccess = function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    let tooltip;
+    if (window.bootstrap) {
+      button.setAttribute("data-bs-toggle", "tooltip");
+      button.setAttribute("data-bs-placement", "left");
+      button.setAttribute("data-bs-title", "Copied!");
+      tooltip = new bootstrap.Tooltip(button, 
+        { trigger: "manual", 
+          customClass: "code-copy-button-tooltip",
+          offset: [0, -8]});
+      tooltip.show();    
+    }
+    setTimeout(function() {
+      if (tooltip) {
+        tooltip.hide();
+        button.removeAttribute("data-bs-title");
+        button.removeAttribute("data-bs-toggle");
+        button.removeAttribute("data-bs-placement");
+      }
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  }
+  const getTextToCopy = function(trigger) {
+      const codeEl = trigger.previousElementSibling.cloneNode(true);
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+  }
+  const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+    text: getTextToCopy
+  });
+  clipboard.on('success', onCopySuccess);
+  if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+    // For code content inside modals, clipBoardJS needs to be initialized with a container option
+    // TODO: Check when it could be a function (https://github.com/zenorocha/clipboard.js/issues/860)
+    const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+      text: getTextToCopy,
+      container: window.document.getElementById('quarto-embedded-source-code-modal')
+    });
+    clipboardModal.on('success', onCopySuccess);
+  }
+    var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+    var mailtoRegex = new RegExp(/^mailto:/);
+      var filterRegex = new RegExp('/' + window.location.host + '/');
+    var isInternal = (href) => {
+        return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+    }
+    // Inspect non-navigation links and adorn them if external
+ 	var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+    for (var i=0; i<links.length; i++) {
+      const link = links[i];
+      if (!isInternal(link.href)) {
+        // undo the damage that might have been done by quarto-nav.js in the case of
+        // links that we want to consider external
+        if (link.dataset.originalHref !== undefined) {
+          link.href = link.dataset.originalHref;
+        }
+      }
+    }
+  function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+    const config = {
+      allowHTML: true,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start',
+    };
+    if (contentFn) {
+      config.content = contentFn;
+    }
+    if (onTriggerFn) {
+      config.onTrigger = onTriggerFn;
+    }
+    if (onUntriggerFn) {
+      config.onUntrigger = onUntriggerFn;
+    }
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      if (note) {
+        return note.innerHTML;
+      } else {
+        return "";
+      }
+    });
+  }
+  const xrefs = window.document.querySelectorAll('a.quarto-xref');
+  const processXRef = (id, note) => {
+    // Strip column container classes
+    const stripColumnClz = (el) => {
+      el.classList.remove("page-full", "page-columns");
+      if (el.children) {
+        for (const child of el.children) {
+          stripColumnClz(child);
+        }
+      }
+    }
+    stripColumnClz(note)
+    if (id === null || id.startsWith('sec-')) {
+      // Special case sections, only their first couple elements
+      const container = document.createElement("div");
+      if (note.children && note.children.length > 2) {
+        container.appendChild(note.children[0].cloneNode(true));
+        for (let i = 1; i < note.children.length; i++) {
+          const child = note.children[i];
+          if (child.tagName === "P" && child.innerText === "") {
+            continue;
+          } else {
+            container.appendChild(child.cloneNode(true));
+            break;
+          }
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(container);
+        }
+        return container.innerHTML
+      } else {
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        return note.innerHTML;
+      }
+    } else {
+      // Remove any anchor links if they are present
+      const anchorLink = note.querySelector('a.anchorjs-link');
+      if (anchorLink) {
+        anchorLink.remove();
+      }
+      if (window.Quarto?.typesetMath) {
+        window.Quarto.typesetMath(note);
+      }
+      // TODO in 1.5, we should make sure this works without a callout special case
+      if (note.classList.contains("callout")) {
+        return note.outerHTML;
+      } else {
+        return note.innerHTML;
+      }
+    }
+  }
+  for (var i=0; i<xrefs.length; i++) {
+    const xref = xrefs[i];
+    tippyHover(xref, undefined, function(instance) {
+      instance.disable();
+      let url = xref.getAttribute('href');
+      let hash = undefined; 
+      if (url.startsWith('#')) {
+        hash = url;
+      } else {
+        try { hash = new URL(url).hash; } catch {}
+      }
+      if (hash) {
+        const id = hash.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note !== null) {
+          try {
+            const html = processXRef(id, note.cloneNode(true));
+            instance.setContent(html);
+          } finally {
+            instance.enable();
+            instance.show();
+          }
+        } else {
+          // See if we can fetch this
+          fetch(url.split('#')[0])
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.getElementById(id);
+            if (note !== null) {
+              const html = processXRef(id, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      } else {
+        // See if we can fetch a full url (with no hash to target)
+        // This is a special case and we should probably do some content thinning / targeting
+        fetch(url)
+        .then(res => res.text())
+        .then(html => {
+          const parser = new DOMParser();
+          const htmlDoc = parser.parseFromString(html, "text/html");
+          const note = htmlDoc.querySelector('main.content');
+          if (note !== null) {
+            // This should only happen for chapter cross references
+            // (since there is no id in the URL)
+            // remove the first header
+            if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+              note.children[0].remove();
+            }
+            const html = processXRef(null, note);
+            instance.setContent(html);
+          } 
+        }).finally(() => {
+          instance.enable();
+          instance.show();
+        });
+      }
+    }, function(instance) {
+    });
+  }
+      let selectedAnnoteEl;
+      const selectorForAnnotation = ( cell, annotation) => {
+        let cellAttr = 'data-code-cell="' + cell + '"';
+        let lineAttr = 'data-code-annotation="' +  annotation + '"';
+        const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+        return selector;
+      }
+      const selectCodeLines = (annoteEl) => {
+        const doc = window.document;
+        const targetCell = annoteEl.getAttribute("data-target-cell");
+        const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+        const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+        const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+        const lineIds = lines.map((line) => {
+          return targetCell + "-" + line;
+        })
+        let top = null;
+        let height = null;
+        let parent = null;
+        if (lineIds.length > 0) {
+            //compute the position of the single el (top and bottom and make a div)
+            const el = window.document.getElementById(lineIds[0]);
+            top = el.offsetTop;
+            height = el.offsetHeight;
+            parent = el.parentElement.parentElement;
+          if (lineIds.length > 1) {
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+            height = bottom - top;
+          }
+          if (top !== null && height !== null && parent !== null) {
+            // cook up a div (if necessary) and position it 
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
+            }
+            div.style.top = top - 2 + "px";
+            div.style.height = height + 4 + "px";
+            div.style.left = 0;
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
+            }
+            gutterDiv.style.top = top - 2 + "px";
+            gutterDiv.style.height = height + 4 + "px";
+          }
+          selectedAnnoteEl = annoteEl;
+        }
+      };
+      const unselectCodeLines = () => {
+        const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+        elementsIds.forEach((elId) => {
+          const div = window.document.getElementById(elId);
+          if (div) {
+            div.remove();
+          }
+        });
+        selectedAnnoteEl = undefined;
+      };
+        // Handle positioning of the toggle
+    window.addEventListener(
+      "resize",
+      throttle(() => {
+        elRect = undefined;
+        if (selectedAnnoteEl) {
+          selectCodeLines(selectedAnnoteEl);
+        }
+      }, 10)
+    );
+    function throttle(fn, ms) {
+    let throttle = false;
+    let timer;
+      return (...args) => {
+        if(!throttle) { // first call gets through
+            fn.apply(this, args);
+            throttle = true;
+        } else { // all the others get throttled
+            if(timer) clearTimeout(timer); // cancel #2
+            timer = setTimeout(() => {
+              fn.apply(this, args);
+              timer = throttle = false;
+            }, ms);
+        }
+      };
+    }
+      // Attach click handler to the DT
+      const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+      for (const annoteDlNode of annoteDls) {
+        annoteDlNode.addEventListener('click', (event) => {
+          const clickedEl = event.target;
+          if (clickedEl !== selectedAnnoteEl) {
+            unselectCodeLines();
+            const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+            if (activeEl) {
+              activeEl.classList.remove('code-annotation-active');
+            }
+            selectCodeLines(clickedEl);
+            clickedEl.classList.add('code-annotation-active');
+          } else {
+            // Unselect the line
+            unselectCodeLines();
+            clickedEl.classList.remove('code-annotation-active');
+          }
+        });
+      }
+  const findCites = (el) => {
+    const parentEl = el.parentElement;
+    if (parentEl) {
+      const cites = parentEl.dataset.cites;
+      if (cites) {
+        return {
+          el,
+          cites: cites.split(' ')
+        };
+      } else {
+        return findCites(el.parentElement)
+      }
+    } else {
+      return undefined;
+    }
+  };
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const citeInfo = findCites(ref);
+    if (citeInfo) {
+      tippyHover(citeInfo.el, function() {
+        var popup = window.document.createElement('div');
+        citeInfo.cites.forEach(function(cite) {
+          var citeDiv = window.document.createElement('div');
+          citeDiv.classList.add('hanging-indent');
+          citeDiv.classList.add('csl-entry');
+          var biblioDiv = window.document.getElementById('ref-' + cite);
+          if (biblioDiv) {
+            citeDiv.innerHTML = biblioDiv.innerHTML;
+          }
+          popup.appendChild(citeDiv);
+        });
+        return popup.innerHTML;
+      });
+    }
+  }
+});
+</script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>
