@@ -121,7 +121,11 @@ sanity(fit_spatial)
 Did it have trouble? If so, try an extra optimization run and see if that's sufficient:
 
 ```{r}
-fit_spatial <- run_extra_optimization(fit_spatial)
+max(fit_spatial$gradients)
+
+fit_spatial <- run_extra_optimization(fit_spatial, nlminb_loops = 1)
+
+max(fit_spatial$gradients)
 sanity(fit_spatial)
 ```
 
@@ -152,11 +156,26 @@ fit <- sdmTMB(
 )
 ```
 
+### Exercise:
+
+A refresher from yesterday:
+
+1.  What are the other options for 'spatial'?
+2.  What are the other options for 'spatiotemporal'?
+
 Print the model:
 
 ```{r}
 fit
 ```
+
+### Exercise:
+
+A refresher from yesterday:
+
+1.  What is the 'Matern range' in the output?
+2.  What is the 'Spatial SD' in the output?
+3.  What is new in the output of `fit` compared to `fit_spatial`?
 
 Run a basic sanity check on the model:
 
@@ -264,10 +283,6 @@ ggplot(dat, aes(X, Y, colour = resid)) +
   scale_colour_gradient2()
 ```
 
-## Exercise:
-
-1.  What are you looking for in the above? Does it look OK?
-
 We can check the distribution of the residuals with a QQ plot:
 
 ```{r}
@@ -275,7 +290,11 @@ qqnorm(dat$resid)
 qqline(dat$resid)
 ```
 
-These don't look great, *but*, this is largely a function of error from the Laplace approximation on the random effects (see [Thygesen et al. 2017](https://doi.org/10.1007/s10651-017-0372-4)). MCMC-based are a better approach, but are slower. There's a whole vignette on residual checking with sdmTMB here: <https://pbs-assess.github.io/sdmTMB/articles/residual-checking.html>
+## Exercise:
+
+1.  What are you looking for in the above? Does it look OK?
+
+There's a whole vignette on residual checking with sdmTMB here: <https://pbs-assess.github.io/sdmTMB/articles/residual-checking.html>
 
 # Fitting an anisotropic model
 
@@ -303,6 +322,11 @@ Anisotropic range is best examined graphically:
 ```{r}
 plot_anisotropy(fit_aniso)
 ```
+
+## Exercise:
+
+1.  What is this plot showing? See `?plot_anisotropy`
+2.  Does this make sense here? Think about the geography of west coast of Vancouver Island.
 
 Notice how the correlation occurs over longer distances along the NW/SE plane than the NE/SW plane. In contrast, the correlation distance is constant in all dimensions in our initial (isotropic) model. In other words, if we were to make a similar plot to the above for the isotropic model, it would be a circle whose radius is the estimated spatial range.
 
@@ -348,3 +372,22 @@ bind_rows(index, index_c) %>%
   xlab("Year") +
   ylab("Biomass estimate (tonnes)")
 ```
+
+What if we compare this isotropic model to the anisotropic model index?
+
+```{r}
+p1 <- predict(fit_aniso, newdata = grid, return_tmb_object = TRUE)
+index_a <- get_index(p1, area = grid$cell_area, bias_correct = TRUE)
+index_a$Method <- "Bias correction aniso"
+
+bind_rows(index_a, index_c) %>%
+  ggplot(aes(year, est, fill = Method)) +
+  geom_line(aes(colour = Method)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr), alpha = 0.4) +
+  xlab("Year") +
+  ylab("Biomass estimate (tonnes)")
+```
+
+## Exercise:
+
+1.  AIC indicated that the model with anisotropy was the better model, but what difference do you notice between the two indices?
